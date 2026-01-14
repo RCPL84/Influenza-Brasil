@@ -1,0 +1,7 @@
+{
+  "name": "Influenza Care for Travelers",
+  "description": "Uma plataforma inteligente para triagem, orientação e gestão domiciliar de casos de Influenza, com suporte de IA para análise de sintomas.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
