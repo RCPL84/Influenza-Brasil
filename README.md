@@ -15,6 +15,41 @@ View your app in AI Studio: https://ai.studio/apps/drive/141LhXDgymRQ3z95aA1jLQv
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Set the `GEMINI_API_KEY` in your environment to your Gemini API key (server-side only). Do NOT place this secret in client-side files or in `.env` values that will be injected into the browser bundle.
+
+   - macOS / Linux:
+     ```bash
+     export GEMINI_API_KEY="sk_your_key_here"
+     ```
+   - Windows PowerShell:
+     ```powershell
+     $env:GEMINI_API_KEY = "sk_your_key_here"
+     ```
+
+3. Run the frontend dev server:
    `npm run dev`
+
+4. Run the server proxy (dev):
+   `npm run dev:server`
+
+The app's frontend talks to a server-side proxy at `/api/chat` which holds the GEMINI_API_KEY and calls the GenAI SDK. This ensures your API key is never bundled into browser code.
+
+### Production-style run
+
+1. Build the frontend:
+   `npm run build`
+2. Compile the TypeScript server (if your workflow outputs to `dist/`):
+   `npx tsc`
+3. Start the server (expects compiled JS at `dist/server.js`):
+   `npm run start:server`
+
+### Security note (essential)
+
+- The GEMINI_API_KEY must remain on the server. Do not inject it into the client bundle via Vite `define` or similar. This repository was updated to move GenAI calls to a server-side `/api/chat` endpoint — keep that pattern.
+- If you believe the key was ever committed, pushed, or exposed, rotate it immediately in the provider console.
+
+### Useful tips
+
+- For fast server development with automatic restarts, install `ts-node-dev` as a dev dependency and use it in `dev:server`.
+- If serving frontend and backend from different origins, configure CORS on the server.
+
