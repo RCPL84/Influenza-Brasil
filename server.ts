@@ -1,6 +1,7 @@
 import express from 'express';
 import { Server } from 'http';
 import { GoogleGenAI } from '@google/genai';
+import Redis from 'ioredis';
 
 const app = express();
 
@@ -23,42 +24,85 @@ app.use((req, res, next) => {
   next();
 });
 
-/**
- * Simple in-memory rate limiter middleware per IP.
- * - maxRequests: number of allowed requests per windowMs
- * - windowMs: time window in milliseconds
- *
- * NOTE: This is an in-memory limiter suitable for single-instance deployments or low-traffic dev use.
- * For production / multi-instance, use a distributed store (Redis) or a managed provider.
- */
-const rateLimitMap = new Map<string, { count: number; expiresAt: number }>();
+// Rate limit configuration
 const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 60; // default: 60 requests
 const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000; // default: 1 minute
+const REDIS_URL = process.env.REDIS_URL || process.env.REDIS || 'redis://127.0.0.1:6379';
 
-function rateLimitMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
+// In-memory fallback if Redis isn't available (keeps behaviour for single-instance/dev)
+const inMemoryMap = new Map<string, { count: number; expiresAt: number }>();
 
-  if (!entry || entry.expiresAt <= now) {
-    // start a new window
-    rateLimitMap.set(ip, { count: 1, expiresAt: now + RATE_LIMIT_WINDOW_MS });
+let redisClient: Redis | null = null;
+let redisAvailable = false;
+
+try {
+  redisClient = new Redis(REDIS_URL);
+  redisClient.on('connect', () => {
+    console.log('Redis: connected');
+    redisAvailable = true;
+  });
+  redisClient.on('error', (err) => {
+    console.error('Redis error:', err.message || err);
+    redisAvailable = false;
+  });
+} catch (err) {
+  console.error('Failed to initialize Redis client', err);
+  redisAvailable = false;
+}
+
+async function redisRateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || (req.connection && (req.connection as any).remoteAddress) || 'unknown';
+  const key = `rl:${ip}`;
+  const windowSec = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+
+  if (!redisClient || !redisAvailable) {
+    // Fallback to in-memory limiter
+    const now = Date.now();
+    const entry = inMemoryMap.get(ip);
+
+    if (!entry || entry.expiresAt <= now) {
+      inMemoryMap.set(ip, { count: 1, expiresAt: now + RATE_LIMIT_WINDOW_MS });
+      res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
+      res.setHeader('X-RateLimit-Remaining', String(RATE_LIMIT_MAX - 1));
+      return next();
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX) {
+      const retryAfter = Math.ceil((entry.expiresAt - now) / 1000);
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+
+    entry.count += 1;
+    inMemoryMap.set(ip, entry);
     res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
-    res.setHeader('X-RateLimit-Remaining', String(RATE_LIMIT_MAX - 1));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_LIMIT_MAX - entry.count)));
     return next();
   }
 
-  if (entry.count >= RATE_LIMIT_MAX) {
-    const retryAfter = Math.ceil((entry.expiresAt - now) / 1000);
-    res.setHeader('Retry-After', String(retryAfter));
-    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
-  }
+  try {
+    // Use Redis INCR and EXPIRE atomically across instances
+    const current = await redisClient.incr(key);
+    if (current === 1) {
+      await redisClient.expire(key, windowSec);
+    }
 
-  entry.count += 1;
-  rateLimitMap.set(ip, entry);
-  res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
-  res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_LIMIT_MAX - entry.count)));
-  return next();
+    const remaining = Math.max(0, RATE_LIMIT_MAX - Number(current));
+    res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+
+    if (Number(current) > RATE_LIMIT_MAX) {
+      const ttl = await redisClient.ttl(key);
+      res.setHeader('Retry-After', String(ttl));
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+
+    return next();
+  } catch (err) {
+    console.error('Redis rate limiter error, falling back to in-memory', err);
+    redisAvailable = false;
+    return redisRateLimit(req, res, next); // retry using fallback
+  }
 }
 
 app.get('/health', (req, res) => {
@@ -69,8 +113,8 @@ app.get('/', (req, res) => {
   res.status(200).send('Influenza Care API - Running on Cloud Run');
 });
 
-// Apply rate limiter only to the chat endpoint to protect the GenAI quota.
-app.post('/api/chat', rateLimitMiddleware, async (req, res) => {
+// Apply Redis-backed rate limiter (with in-memory fallback) to the chat endpoint to protect the GenAI quota.
+app.post('/api/chat', redisRateLimit, async (req, res) => {
   const { message, history } = req.body as { message: string; history?: { role: string; content: string }[] };
 
   if (!message) return res.status(400).json({ error: 'Missing message' });
@@ -118,9 +162,13 @@ const server: Server = app.listen(PORT, HOST, () => {
  */
 const gracefulShutdown = (signal: string) => {
   console.log(`${signal} received: closing HTTP server...`);
-  server.close(() => {
+  server.close(async () => {
+    try {
+      if (redisClient) await redisClient.quit();
+    } catch (e) {
+      // ignore
+    }
     console.log('HTTP server closed. Exiting process.');
-    // Fix: cast to any to access Node.js process.exit
     (process as any).exit(0);
   });
 };
