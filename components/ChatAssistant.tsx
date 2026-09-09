@@ -28,27 +28,38 @@ const ChatAssistant: React.FC<Props> = ({ onBack }) => {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input };
-    setMessages(prev => [...prev, userMsg]);
+    // Build the new user message and update local state immediately so UI reflects it.
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: trimmed };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
-    // Fix: Format history correctly for the SDK (parts must be an array of objects with 'text')
-    const history = messages.map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }]
-    }));
+    try {
+      // Build a simple history shape expected by the server proxy
+      const history = newMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-    const response = await getHealthChatResponse(input, history);
-    
-    setMessages(prev => [...prev, { 
-      id: (Date.now() + 1).toString(), 
-      role: 'assistant', 
-      content: response 
-    }]);
-    setIsLoading(false);
+      // Call the server-side proxy which holds the secret key
+      const response = await getHealthChatResponse(trimmed, history);
+
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response
+      };
+
+      // Append assistant reply to messages already containing the just-sent user message
+      setMessages([...newMessages, assistantMsg]);
+    } catch (error) {
+      console.error('Failed to get AI response', error);
+      const errorMsg: Message = { id: (Date.now() + 2).toString(), role: 'assistant', content: 'Desculpe, não foi possível contatar o serviço de IA no momento.' };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
