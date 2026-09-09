@@ -34,6 +34,8 @@ View your app in AI Studio: https://ai.studio/apps/drive/141LhXDgymRQ3z95aA1jLQv
 
 The app's frontend talks to a server-side proxy at `/api/chat` which holds the GEMINI_API_KEY and calls the GenAI SDK. This ensures your API key is never bundled into browser code.
 
+> Tip: Copy `.env.local.example` to `.env.local` and fill in your local values. Keep `.env.local` out of version control — this repo includes `.env.local.example` as a template.
+
 ### Production-style run
 
 1. Build the frontend:
