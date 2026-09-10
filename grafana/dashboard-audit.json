@@ -1,0 +1,55 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "influenza_audit",
+    "title": "Influenza App - Audit & Keys",
+    "schemaVersion": 36,
+    "version": 1,
+    "refresh": "15s",
+    "panels": [
+      {
+        "type": "table",
+        "title": "Recent Audit Events (Loki)",
+        "id": 1,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "{job=\"audits\"} | json",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+        "options": { "showHeader": true }
+      },
+      {
+        "type": "timeseries",
+        "title": "Audit Events Rate (all actions)",
+        "id": 2,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "rate(audit_events_total[5m])",
+            "legendFormat": "events/s",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 0, "y": 10, "w": 12, "h": 6 }
+      },
+      {
+        "type": "barchart",
+        "title": "Top Keys by Audit Events (5m)",
+        "id": 3,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "topk(10, sum by (keyId) (increase(audit_events_by_key_total[5m])))",
+            "legendFormat": "{{keyId}}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 12, "y": 10, "w": 12, "h": 6 }
+      }
+    ]
+  },
+  "overwrite": false
+}
