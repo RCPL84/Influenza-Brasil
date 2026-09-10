@@ -55,3 +55,11 @@ The app's frontend talks to a server-side proxy at `/api/chat` which holds the G
 - For fast server development with automatic restarts, install `ts-node-dev` as a dev dependency and use it in `dev:server`.
 - If serving frontend and backend from different origins, configure CORS on the server.
 
+
+Redis (rate-limiter) — local dev
+- This project supports a Redis-backed rate limiter for /api/chat. To run Redis locally:
+  `docker compose up -d`
+- Set REDIS_URL if needed:
+  `export REDIS_URL=redis://127.0.0.1:6379`
+- Recommended production note: use a managed/secured Redis instance; do not expose Redis publicly.
+
