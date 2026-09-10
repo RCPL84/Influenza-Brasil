@@ -1,0 +1,82 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "influenza_app_metrics",
+    "title": "Influenza App - Metrics",
+    "tags": ["influenza","app","metrics"],
+    "timezone": "browser",
+    "schemaVersion": 36,
+    "version": 1,
+    "refresh": "15s",
+    "panels": [
+      {
+        "type": "timeseries",
+        "title": "Auth Failures",
+        "id": 1,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "app_auth_failures",
+            "interval": "",
+            "legendFormat": "auth_failures",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 }
+      },
+      {
+        "type": "timeseries",
+        "title": "Throttle Events",
+        "id": 2,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "app_throttle_events",
+            "legendFormat": "throttle_events",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 }
+      },
+      {
+        "type": "timeseries",
+        "title": "Admin Keys Created",
+        "id": 3,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "app_admin_keys_created",
+            "legendFormat": "admin_keys_created",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 6 }
+      },
+      {
+        "type": "timeseries",
+        "title": "Admin Keys Revoked",
+        "id": 4,
+        "datasource": null,
+        "targets": [
+          {
+            "expr": "app_admin_keys_revoked",
+            "legendFormat": "admin_keys_revoked",
+            "refId": "A"
+          }
+        ],
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 6 }
+      },
+      {
+        "type": "table",
+        "title": "Recent Audit Events (via API)",
+        "id": 5,
+        "datasource": null,
+        "gridPos": { "x": 0, "y": 14, "w": 24, "h": 10 },
+        "options": {
+          "showHeader": true
+        }
+      }
+    ]
+  },
+  "overwrite": false
+}
