@@ -13,5 +13,34 @@ services:
     image: grafana/grafana:latest
     ports:
       - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./grafana:/var/lib/grafana
+    depends_on:
+      - loki
+  loki:
+    image: grafana/loki:2.8.2
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki:/etc/loki
+  audit-exporter:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.audit-exporter
+    environment:
+      - REDIS_URL=redis://host.docker.internal:6379
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - PORT=9400
+    depends_on:
+      - loki
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./prometheus/alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
